@@ -1,0 +1,55 @@
+# Node modules
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# TypeScript
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# Coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+
+# Lock files (tuỳ chọn giữ lại 1 loại)
+# Nếu dùng npm thì giữ package-lock.json
+# Nếu dùng pnpm thì giữ pnpm-lock.yaml
+# Nếu dùng yarn thì giữ yarn.lock
+
+# Uncomment nếu muốn ignore:
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Misc
+*.local
