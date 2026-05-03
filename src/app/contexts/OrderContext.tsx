@@ -1,45 +1,98 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
-import { Order, OrderItem, OrderStatus } from '../types';
+import {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useEffect,
+} from "react";
+import { Order, OrderItem, OrderStatus } from "../types";
 import React from "react";
+import { kdsService } from "../services/kdsService";
+
 interface OrderContextType {
   orders: Order[];
-  addOrder: (order: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  updateOrderStatus: (orderId: string, status: OrderStatus) => void;
+  addOrder: (order: Omit<Order, "id" | "createdAt" | "updatedAt">) => void;
+  updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<boolean>;
   getOrdersByStatus: (status: OrderStatus) => Order[];
-  cancelOrder: (orderId: string) => void;
+  cancelOrder: (orderId: string) => Promise<boolean>;
+  loading: boolean;
+  refreshOrders: () => Promise<void>;
 }
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
 
 export function OrderProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const addOrder = (orderData: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>) => {
+  // Load orders from API
+  const refreshOrders = async () => {
+    setLoading(true);
+    try {
+      const activeTickets = await kdsService.getActiveTickets();
+      setOrders(activeTickets);
+    } catch (error) {
+      console.error("Failed to refresh orders:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshOrders();
+
+    // Use polling as a fallback for real-time updates (since WebSocket is not supported in this environment)
+    const handleTicketUpdate = async (data: any) => {
+      console.log("Polling update received:", data);
+      await refreshOrders();
+    };
+
+    kdsService.startPolling(handleTicketUpdate, 30000); // Poll every 30 seconds
+
+    return () => {
+      kdsService.stopPolling();
+    };
+  }, []);
+
+  const addOrder = (
+    orderData: Omit<Order, "id" | "createdAt" | "updatedAt">,
+  ) => {
     const newOrder: Order = {
       ...orderData,
       id: `order-${Date.now()}`,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    setOrders(prev => [newOrder, ...prev]);
+    setOrders((prev) => [newOrder, ...prev]);
   };
 
-  const updateOrderStatus = (orderId: string, status: OrderStatus) => {
-    setOrders(prev =>
-      prev.map(order =>
-        order.id === orderId
-          ? { ...order, status, updatedAt: new Date() }
-          : order
-      )
-    );
+  const updateOrderStatus = async (
+    orderId: string,
+    status: OrderStatus,
+  ): Promise<boolean> => {
+    const success = await kdsService.updateTicketStatus(orderId, status);
+
+    if (success) {
+      // Update local state
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === orderId
+            ? { ...order, status, updatedAt: new Date() }
+            : order,
+        ),
+      );
+    }
+
+    return success;
   };
 
   const getOrdersByStatus = (status: OrderStatus) => {
-    return orders.filter(order => order.status === status);
+    return orders.filter((order) => order.status === status);
   };
 
-  const cancelOrder = (orderId: string) => {
-    updateOrderStatus(orderId, 'cancelled');
+  const cancelOrder = async (orderId: string): Promise<boolean> => {
+    console.warn("Cancel order not supported via KDS API");
+    return false;
   };
 
   return (
@@ -50,6 +103,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         updateOrderStatus,
         getOrdersByStatus,
         cancelOrder,
+        loading,
+        refreshOrders,
       }}
     >
       {children}
@@ -60,7 +115,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 export function useOrders() {
   const context = useContext(OrderContext);
   if (!context) {
-    throw new Error('useOrders must be used within OrderProvider');
+    throw new Error("useOrders must be used within OrderProvider");
   }
   return context;
 }

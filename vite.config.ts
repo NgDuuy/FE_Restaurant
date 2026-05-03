@@ -19,4 +19,28 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  define: {
+    global: 'globalThis',
+  },
+  
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'https://api-gateway-606057767170.asia-southeast1.run.app',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path,
+      },
+
+      '/ws': {
+        target: 'wss://api-gateway-606057767170.asia-southeast1.run.app',
+        changeOrigin: true,
+        ws: true,
+        secure: false,
+        rewrite: (path) => path,
+      }
+    }
+  }
 })
