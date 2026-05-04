@@ -47,7 +47,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       await refreshOrders();
     };
 
-    kdsService.startPolling(handleTicketUpdate, 30000); // Poll every 30 seconds
+    kdsService.startPolling(handleTicketUpdate, 2000); // Poll every 2 seconds
 
     return () => {
       kdsService.stopPolling();
