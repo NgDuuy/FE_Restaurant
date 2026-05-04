@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, UserRole } from '../types';
+import { login as loginRequest } from '../services/authApi';
 import React from "react";
 interface AuthContextType {
   user: User | null;
@@ -9,26 +10,56 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AUTH_TOKEN_KEY = 'irms_auth_token';
+const AUTH_USER_KEY = 'irms_auth_user';
+
+const roleLabels: Record<UserRole, string> = {
+  server: 'Server',
+  chef: 'Chef',
+  manager: 'Manager',
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
+  useEffect(() => {
+    const storedUser = localStorage.getItem(AUTH_USER_KEY);
+
+    if (!storedUser) {
+      return;
+    }
+
+    try {
+      setUser(JSON.parse(storedUser) as User);
+    } catch {
+      localStorage.removeItem(AUTH_USER_KEY);
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+  }, []);
+
   const login = async (username: string, password: string, role: UserRole): Promise<boolean> => {
-    // Simulate authentication
-    if (username && password) {
+    try {
+      const response = await loginRequest({ username, password });
+
       const newUser: User = {
-        id: `user-${Date.now()}`,
+        id: username,
         username,
         role,
-        name: username.charAt(0).toUpperCase() + username.slice(1),
+        name: roleLabels[role],
       };
+
+      localStorage.setItem(AUTH_TOKEN_KEY, response.token);
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(newUser));
       setUser(newUser);
       return true;
+    } catch {
+      return false;
     }
-    return false;
   };
 
   const logout = () => {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_USER_KEY);
     setUser(null);
   };
 

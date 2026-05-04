@@ -1,16 +1,37 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { MenuItem, Combo } from '../types';
+import React, { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import { Combo, MenuItem, RestaurantCategory } from '../types';
+import {
+  createMenuItem,
+  deleteMenuItem as deleteMenuItemRequest,
+  fromMenuItemResponse,
+  listCategories,
+  listMenuItems,
+  toMenuItemRequest,
+  updateMenuItem as updateMenuItemRequest,
+  CategoryResponseDTO,
+  MenuItemResponseDTO,
+} from '../services/menuApi';
 
 interface MenuContextType {
   menuItems: MenuItem[];
   combos: Combo[];
-  updateMenuItem: (id: string, updates: Partial<MenuItem>) => void;
-  addMenuItem: (item: Omit<MenuItem, 'id'>) => void;
-  deleteMenuItem: (id: string) => void;
+  categories: RestaurantCategory[];
+  loading: boolean;
+  refreshMenu: () => Promise<void>;
+  updateMenuItem: (id: string, updates: Partial<MenuItem>) => Promise<void>;
+  addMenuItem: (item: Omit<MenuItem, 'id'>) => Promise<void>;
+  deleteMenuItem: (id: string) => Promise<void>;
   getMenuItemById: (id: string) => MenuItem | undefined;
 }
 
 const MenuContext = createContext<MenuContextType | undefined>(undefined);
+
+const defaultCategories: RestaurantCategory[] = [
+  { id: 'main', name: 'Món chính', description: 'Main', active: true },
+  { id: 'appetizer', name: 'Khai vị', description: 'Appetizer', active: true },
+  { id: 'beverage', name: 'Đồ uống', description: 'Beverage', active: true },
+  { id: 'dessert', name: 'Tráng miệng', description: 'Dessert', active: true },
+];
 
 // Sample menu data
 const initialMenuItems: MenuItem[] = [
@@ -138,26 +159,77 @@ const initialMenuItems: MenuItem[] = [
   },
 ];
 
+function mapCategoryResponse(category: CategoryResponseDTO): RestaurantCategory {
+  return {
+    id: category.id,
+    name: category.name,
+    description: category.description,
+    active: category.active,
+  };
+}
+
+function mapMenuItems(items: MenuItemResponseDTO[], categories: RestaurantCategory[]) {
+  const categoryById = new Map(categories.map(category => [category.id, category]));
+
+  return items.map(item =>
+    fromMenuItemResponse(item, categoryById.get(item.categoryId)?.name),
+  );
+}
+
 export function MenuProvider({ children }: { children: ReactNode }) {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(initialMenuItems);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [combos, setCombos] = useState<Combo[]>([]);
+  const [categories, setCategories] = useState<RestaurantCategory[]>(defaultCategories);
+  const [loading, setLoading] = useState(true);
 
-  const updateMenuItem = (id: string, updates: Partial<MenuItem>) => {
-    setMenuItems(items =>
-      items.map(item => (item.id === id ? { ...item, ...updates } : item))
-    );
+  const fallbackData = useMemo(() => ({
+    menuItems: initialMenuItems,
+    categories: defaultCategories,
+  }), []);
+
+  const refreshMenu = async () => {
+    setLoading(true);
+
+    try {
+      const [categoriesResponse, menuResponse] = await Promise.all([
+        listCategories(),
+        listMenuItems(),
+      ]);
+
+      const mappedCategories = categoriesResponse.map(mapCategoryResponse);
+      setCategories(mappedCategories.length > 0 ? mappedCategories : defaultCategories);
+      setMenuItems(mapMenuItems(menuResponse, mappedCategories.length > 0 ? mappedCategories : defaultCategories));
+    } catch (error) {
+  console.error('Failed to load menu from backend:', error);
+  setCategories(fallbackData.categories);
+  setMenuItems(fallbackData.menuItems);
+} finally {
+      setLoading(false);
+    }
   };
 
-  const addMenuItem = (item: Omit<MenuItem, 'id'>) => {
-    const newItem: MenuItem = {
-      ...item,
-      id: `item-${Date.now()}`,
-    };
-    setMenuItems(items => [...items, newItem]);
+  useEffect(() => {
+    void refreshMenu();
+  }, []);
+
+  const updateMenuItem = async (id: string, updates: Partial<MenuItem>) => {
+    const currentItem = menuItems.find(item => item.id === id);
+    if (!currentItem) return;
+
+    const nextItem: MenuItem = { ...currentItem, ...updates };
+
+    await updateMenuItemRequest(id, toMenuItemRequest(nextItem, nextItem.available));
+    await refreshMenu();
   };
 
-  const deleteMenuItem = (id: string) => {
-    setMenuItems(items => items.filter(item => item.id !== id));
+  const addMenuItem = async (item: Omit<MenuItem, 'id'>) => {
+    await createMenuItem(toMenuItemRequest(item, item.available));
+    await refreshMenu();
+  };
+
+  const deleteMenuItem = async (id: string) => {
+    await deleteMenuItemRequest(id);
+    await refreshMenu();
   };
 
   const getMenuItemById = (id: string) => {
@@ -169,6 +241,9 @@ export function MenuProvider({ children }: { children: ReactNode }) {
       value={{
         menuItems,
         combos,
+        categories,
+        loading,
+        refreshMenu,
         updateMenuItem,
         addMenuItem,
         deleteMenuItem,

@@ -16,11 +16,19 @@ export interface MenuItem {
   name: string;
   nameVi: string;
   category: MenuCategory;
+  categoryId?: string;
   price: number;
   available: boolean;
   preparationTime: number; // minutes
   description?: string;
   image?: string;
+}
+
+export interface RestaurantCategory {
+  id: string;
+  name: string;
+  description?: string;
+  active: boolean;
 }
 
 export interface Combo {

@@ -6,6 +6,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { UtensilsCrossed, ChefHat, UserCircle, Settings } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import React from "react";
 export function Login() {
@@ -14,6 +15,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole>('server');
   const [isLoading, setIsLoading] = useState(false);
+  const authBaseUrl = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_AUTH_BASE_URL ?? 'https://auth-service-606057767170.asia-southeast1.run.app';
 
   const roles = [
     {
@@ -67,7 +69,7 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-slate-50 to-slate-100">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="space-y-3 text-center">
           <div className="flex justify-center">
@@ -82,6 +84,13 @@ export function Login() {
         </CardHeader>
 
         <CardContent>
+          <div className="mb-4 rounded-lg border bg-slate-50 p-3 text-xs text-slate-600">
+            <div className="flex items-center gap-2 font-medium text-slate-800">
+              <ShieldCheck className="h-4 w-4" />
+              Auth backend đang kết nối
+            </div>
+            <p className="mt-1 break-all">{authBaseUrl}</p>
+          </div>
           <form onSubmit={handleLogin} className="space-y-6">
             {/* Role Selection */}
             <div className="space-y-3">

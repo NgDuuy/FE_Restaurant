@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMenu } from '../contexts/MenuContext';
 import { useOrders } from '../contexts/OrderContext';
-import { MenuItem, MenuCategory } from '../types';
+import { MenuItem } from '../types';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from './ui/switch';
 import { Separator } from './ui/separator';
 import React from "react";
+import { useEffect } from 'react';
 import {
   LogOut,
   Settings,
@@ -30,7 +31,7 @@ import {
 
 export function ManagerDashboard() {
   const { user, logout } = useAuth();
-  const { menuItems, updateMenuItem, addMenuItem, deleteMenuItem } = useMenu();
+  const { menuItems, categories, loading, updateMenuItem, addMenuItem, deleteMenuItem } = useMenu();
   const { orders } = useOrders();
 
   const [editDialog, setEditDialog] = useState<{ isOpen: boolean; item: MenuItem | null }>({
@@ -42,19 +43,12 @@ export function ManagerDashboard() {
   const [createForm, setCreateForm] = useState({
     nameVi: '',
     name: '',
-    category: 'main' as MenuCategory,
+    categoryId: '',
     price: 0,
     preparationTime: 10,
     description: '',
     image: '',
   });
-
-  const categories: { value: MenuCategory; label: string; labelEn: string }[] = [
-    { value: 'main', label: 'Món chính', labelEn: 'Main' },
-    { value: 'appetizer', label: 'Khai vị', labelEn: 'Appetizer' },
-    { value: 'beverage', label: 'Đồ uống', labelEn: 'Beverage' },
-    { value: 'dessert', label: 'Tráng miệng', labelEn: 'Dessert' },
-  ];
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('vi-VN', {
@@ -63,13 +57,26 @@ export function ManagerDashboard() {
     }).format(amount);
   };
 
+  useEffect(() => {
+    if (!createForm.categoryId && categories.length > 0) {
+      setCreateForm(current => ({
+        ...current,
+        categoryId: categories[0].id,
+      }));
+    }
+  }, [categories, createForm.categoryId]);
+
   const totalOrders = orders.length;
   const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0);
   const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
   const openEditDialog = (item: MenuItem) => {
+    const fallbackCategoryId = item.categoryId ?? categories.find(category => category.name.toLowerCase().includes(item.category))?.id ?? categories[0]?.id ?? '';
     setEditDialog({ isOpen: true, item });
-    setEditForm(item);
+    setEditForm({
+      ...item,
+      categoryId: fallbackCategoryId,
+    });
   };
 
   const closeEditDialog = () => {
@@ -77,32 +84,33 @@ export function ManagerDashboard() {
     setEditForm({});
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editDialog.item) return;
 
-    updateMenuItem(editDialog.item.id, editForm);
+    await updateMenuItem(editDialog.item.id, editForm);
     closeEditDialog();
   };
 
-  const handleToggleAvailability = (itemId: string, currentStatus: boolean) => {
-    updateMenuItem(itemId, { available: !currentStatus });
+  const handleToggleAvailability = async (itemId: string, currentStatus: boolean) => {
+    await updateMenuItem(itemId, { available: !currentStatus });
   };
 
-  const handleDeleteItem = (itemId: string) => {
+  const handleDeleteItem = async (itemId: string) => {
     if (confirm('Bạn có chắc muốn xóa món này?')) {
-      deleteMenuItem(itemId);
+      await deleteMenuItem(itemId);
     }
   };
 
-  const handleAddMenuItem = () => {
-    if (!createForm.nameVi.trim() || !createForm.name.trim() || createForm.price <= 0) {
+  const handleAddMenuItem = async () => {
+    if (!createForm.nameVi.trim() || !createForm.name.trim() || createForm.price <= 0 || !createForm.categoryId) {
       return;
     }
 
-    addMenuItem({
+    await addMenuItem({
       nameVi: createForm.nameVi.trim(),
       name: createForm.name.trim(),
-      category: createForm.category,
+      category: 'main',
+      categoryId: createForm.categoryId,
       price: createForm.price,
       preparationTime: createForm.preparationTime,
       description: createForm.description.trim() || undefined,
@@ -113,7 +121,7 @@ export function ManagerDashboard() {
     setCreateForm({
       nameVi: '',
       name: '',
-      category: 'main',
+      categoryId: categories[0]?.id ?? '',
       price: 0,
       preparationTime: 10,
       description: '',
@@ -121,8 +129,8 @@ export function ManagerDashboard() {
     });
   };
 
-  const getItemsByCategory = (category: MenuCategory) => {
-    return menuItems.filter(item => item.category === category);
+  const getItemsByCategory = (categoryId: string) => {
+    return menuItems.filter(item => item.categoryId === categoryId);
   };
 
   const getOrderStats = () => {
@@ -157,6 +165,7 @@ export function ManagerDashboard() {
               <div>
                 <h1 className="text-2xl font-bold text-slate-900">Manager Dashboard</h1>
                 <p className="text-sm text-slate-600">Quản lý hệ thống - {user?.name}</p>
+                <p className="text-xs text-slate-500">{loading ? 'Đang tải menu từ backend...' : 'Menu backend đã sẵn sàng'}</p>
               </div>
             </div>
           </div>
@@ -322,12 +331,13 @@ export function ManagerDashboard() {
                       <Label>Danh mục</Label>
                       <select
                         className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                        value={createForm.category}
-                        onChange={(e) => setCreateForm({ ...createForm, category: e.target.value as MenuCategory })}
+                        value={createForm.categoryId}
+                        onChange={(e) => setCreateForm({ ...createForm, categoryId: e.target.value })}
                       >
+                        <option value="">Chọn danh mục</option>
                         {categories.map((cat) => (
-                          <option key={cat.value} value={cat.value}>
-                            {cat.label}
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name}
                           </option>
                         ))}
                       </select>
@@ -373,7 +383,7 @@ export function ManagerDashboard() {
                   <div className="flex justify-end">
                     <Button
                       onClick={handleAddMenuItem}
-                      disabled={!createForm.nameVi.trim() || !createForm.name.trim() || createForm.price <= 0}
+                      disabled={!createForm.nameVi.trim() || !createForm.name.trim() || createForm.price <= 0 || !createForm.categoryId}
                     >
                       <Plus className="h-4 w-4 mr-2" />
                       Thêm món
@@ -383,21 +393,21 @@ export function ManagerDashboard() {
               </Card>
 
               {categories.map(category => (
-                <Card key={category.value}>
+                <Card key={category.id}>
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <div>
-                        <CardTitle>{category.label}</CardTitle>
-                        <CardDescription>{category.labelEn}</CardDescription>
+                        <CardTitle>{category.name}</CardTitle>
+                        <CardDescription>{category.description || 'Danh mục'}</CardDescription>
                       </div>
                       <Badge variant="secondary">
-                        {getItemsByCategory(category.value).length} món
+                        {getItemsByCategory(category.id).length} món
                       </Badge>
                     </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      {getItemsByCategory(category.value).map(item => (
+                      {getItemsByCategory(category.id).map(item => (
                         <div
                           key={item.id}
                           className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border"
@@ -453,7 +463,7 @@ export function ManagerDashboard() {
                         </div>
                       ))}
 
-                      {getItemsByCategory(category.value).length === 0 && (
+                      {getItemsByCategory(category.id).length === 0 && (
                         <p className="text-center text-muted-foreground py-6">
                           Chưa có món nào trong danh mục này
                         </p>
@@ -570,6 +580,22 @@ export function ManagerDashboard() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
+                  <Label>Danh mục</Label>
+                  <select
+                    className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    value={editForm.categoryId || ''}
+                    onChange={(e) => setEditForm({ ...editForm, categoryId: e.target.value })}
+                  >
+                    <option value="">Chọn danh mục</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
                 <Label>Giá (VNĐ)</Label>
                 <Input
                   type="number"
