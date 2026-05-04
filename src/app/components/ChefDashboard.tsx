@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
 import { Separator } from './ui/separator';
-import React from "react";
+import React, { useEffect } from "react";
 import {
   LogOut,
   Clock,
@@ -17,13 +17,35 @@ import {
   AlertTriangle,
   User,
   Hash,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
 export function ChefDashboard() {
   const { user, logout } = useAuth();
-  const { orders, updateOrderStatus } = useOrders();
+  const { orders, updateOrderStatus, loading, refreshOrders } = useOrders();
+  const [wsConnected, setWsConnected] = React.useState(true);
+
+  // WebSocket connection status check (giả lập, có thể cải thiện sau)
+  useEffect(() => {
+    const checkConnection = setInterval(() => {
+      // Kiểm tra kết nối WebSocket thực tế có thể qua service
+      setWsConnected(true); // Tạm thời set true
+    }, 30000);
+
+    return () => clearInterval(checkConnection);
+  }, []);
+
+  // Refresh orders định kỳ mỗi 30 giây (fallback cho WebSocket)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshOrders();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [refreshOrders]);
 
   const newOrders = orders.filter(o => o.status === 'new');
   const cookingOrders = orders.filter(o => o.status === 'cooking');
@@ -42,6 +64,19 @@ export function ChefDashboard() {
   const OrderCard = ({ order }: { order: Order }) => {
     const overdue = isOverdue(order);
     const totalItems = order.items.reduce((sum, item) => sum + item.quantity, 0);
+    const [updating, setUpdating] = React.useState(false);
+
+    const handleUpdateStatus = async (newStatus: OrderStatus) => {
+      if (updating) return;
+      setUpdating(true);
+      try {
+        await updateOrderStatus(order.id, newStatus);
+      } catch (error) {
+        console.error('Failed to update order status:', error);
+      } finally {
+        setUpdating(false);
+      }
+    };
 
     return (
       <Card className={overdue ? 'border-red-500 border-2' : ''}>
@@ -50,7 +85,7 @@ export function ChefDashboard() {
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Hash className="h-4 w-4" />
-                {order.id.split('-')[1]?.substring(0, 6).toUpperCase()}
+                {order.id.split('-')[1]?.substring(0, 6).toUpperCase() || order.id.substring(0, 6).toUpperCase()}
                 {overdue && <AlertTriangle className="h-4 w-4 text-red-500" />}
               </CardTitle>
               <CardDescription className="text-xs mt-1">
@@ -96,10 +131,11 @@ export function ChefDashboard() {
                     {item.notes.map((note, noteIdx) => (
                       <div
                         key={noteIdx}
-                        className={`text-xs p-1.5 rounded flex items-start gap-1 ${note.type === 'allergy'
+                        className={`text-xs p-1.5 rounded flex items-start gap-1 ${
+                          note.type === 'allergy'
                             ? 'bg-red-100 text-red-800 font-semibold border border-red-300'
                             : 'bg-blue-100 text-blue-800'
-                          }`}
+                        }`}
                       >
                         {note.type === 'allergy' && <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />}
                         <span>{note.content}</span>
@@ -118,10 +154,11 @@ export function ChefDashboard() {
             {order.status === 'new' && (
               <Button
                 className="w-full"
-                onClick={() => updateOrderStatus(order.id, 'cooking')}
+                onClick={() => handleUpdateStatus('cooking')}
+                disabled={updating}
               >
                 <PlayCircle className="h-4 w-4 mr-2" />
-                Bắt đầu nấu
+                {updating ? 'Đang xử lý...' : 'Bắt đầu nấu'}
               </Button>
             )}
 
@@ -129,10 +166,11 @@ export function ChefDashboard() {
               <Button
                 className="w-full"
                 variant="default"
-                onClick={() => updateOrderStatus(order.id, 'ready')}
+                onClick={() => handleUpdateStatus('ready')}
+                disabled={updating}
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
-                Hoàn thành
+                {updating ? 'Đang xử lý...' : 'Hoàn thành'}
               </Button>
             )}
 
@@ -140,10 +178,11 @@ export function ChefDashboard() {
               <Button
                 className="w-full"
                 variant="outline"
-                onClick={() => updateOrderStatus(order.id, 'served')}
+                onClick={() => handleUpdateStatus('served')}
+                disabled={updating}
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
-                Đã phục vụ
+                {updating ? 'Đang xử lý...' : 'Đã phục vụ'}
               </Button>
             )}
           </div>
@@ -207,6 +246,26 @@ export function ChefDashboard() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Connection Status */}
+            <div className="flex items-center gap-2">
+              {wsConnected ? (
+                <Wifi className="h-4 w-4 text-green-500" />
+              ) : (
+                <WifiOff className="h-4 w-4 text-red-500" />
+              )}
+              <span className="text-xs text-muted-foreground">
+                {wsConnected ? 'Đã kết nối' : 'Đang kết nối...'}
+              </span>
+            </div>
+
+            {/* Loading Indicator */}
+            {loading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-500"></div>
+                <span>Đang tải...</span>
+              </div>
+            )}
+
             {/* Stats */}
             <div className="flex items-center gap-6 bg-slate-50 px-6 py-3 rounded-lg border">
               <div className="text-center">
@@ -224,6 +283,25 @@ export function ChefDashboard() {
                 <div className="text-xs text-muted-foreground">Sẵn sàng</div>
               </div>
             </div>
+
+            {/* Refresh Button */}
+            <Button 
+              variant="outline" 
+              onClick={() => refreshOrders()}
+              disabled={loading}
+              size="sm"
+            >
+              <svg 
+                className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} 
+                xmlns="http://www.w3.org/2000/svg" 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Làm mới
+            </Button>
 
             <Button variant="outline" onClick={logout}>
               <LogOut className="h-4 w-4 mr-2" />
