@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, UserRole } from '../types';
 import { login as loginRequest } from '../services/authApi';
+import { config } from '../config/config';
 import React from "react";
 interface AuthContextType {
   user: User | null;
@@ -10,8 +11,8 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const AUTH_TOKEN_KEY = 'irms_auth_token';
-const AUTH_USER_KEY = 'irms_auth_user';
+const AUTH_TOKEN_KEY = config.auth.tokenKey;
+const AUTH_USER_KEY = config.auth.userKey;
 
 const roleLabels: Record<UserRole, string> = {
   server: 'Server',

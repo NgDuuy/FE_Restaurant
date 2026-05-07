@@ -1,7 +1,7 @@
 import { RestaurantCategory, MenuCategory, MenuItem } from '../types';
+import { config, getApiUrl } from '../config/config';
 
-const MENU_BASE_URL = 'https://api-gateway.dungne.io.vn';
-const AUTH_TOKEN_KEY = 'irms_auth_token';
+const AUTH_TOKEN_KEY = config.auth.tokenKey;
 
 export interface CustomizationDTO {
   name: string;
@@ -54,7 +54,7 @@ function getAuthHeaders() {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${MENU_BASE_URL}${path}`, {
+  const response = await fetch(getApiUrl(path), {
     ...init,
     headers: {
       ...getAuthHeaders(),
@@ -104,25 +104,25 @@ export function deleteMenuItem(itemId: string) {
 }
 
 export function listCategories() {
-  return request<CategoryResponseDTO[]>('/api/menu/categories');
+  return request<CategoryResponseDTO[]>('/api/categories');
 }
 
 export function createCategory(body: CategoryRequestDTO) {
-  return request<CategoryResponseDTO>('/api/menu/categories', {
+  return request<CategoryResponseDTO>('/api/categories', {
     method: 'POST',
     body: JSON.stringify(body),
   });
 }
 
 export function updateCategory(categoryId: string, body: CategoryRequestDTO) {
-  return request<CategoryResponseDTO>(`/api/menu/categories/${categoryId}`, {
+  return request<CategoryResponseDTO>(`/api/categories/${categoryId}`, {
     method: 'PUT',
     body: JSON.stringify(body),
   });
 }
 
 export function deleteCategory(categoryId: string) {
-  return request<void>(`/api/menu/categories/${categoryId}`, {
+  return request<void>(`/api/categories/${categoryId}`, {
     method: 'DELETE',
   });
 }
@@ -172,7 +172,7 @@ export function toMenuItemRequest(item: Partial<MenuItem> & { categoryId?: strin
 }
 
 export function getMenuBaseUrl() {
-  return MENU_BASE_URL;
+  return config.api.baseURL;
 }
 
 export function getStoredMenuToken() {

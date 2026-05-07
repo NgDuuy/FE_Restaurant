@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { UtensilsCrossed, ChefHat, UserCircle, Settings } from 'lucide-react';
 import { ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { config } from '../config/config';
 import React from "react";
 export function Login() {
   const { login } = useAuth();
@@ -15,7 +16,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole>('server');
   const [isLoading, setIsLoading] = useState(false);
-  const authBaseUrl = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_AUTH_BASE_URL ?? 'https://auth-service-606057767170.asia-southeast1.run.app';
+  const authBaseUrl = config.api.baseURL;
 
   const roles = [
     {

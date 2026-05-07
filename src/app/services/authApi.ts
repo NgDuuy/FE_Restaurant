@@ -1,6 +1,5 @@
 import { UserRole } from '../types';
-
-const AUTH_BASE_URL = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_AUTH_BASE_URL ?? 'https://auth-service-606057767170.asia-southeast1.run.app';
+import { config, getApiUrl } from '../config/config';
 
 export interface AuthRequest {
   username: string;
@@ -16,7 +15,7 @@ export interface AuthResponse {
 }
 
 async function request<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${AUTH_BASE_URL}${path}`, {
+  const response = await fetch(getApiUrl(path), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -41,5 +40,5 @@ export function register(registerRequest: RegisterRequest) {
 }
 
 export function getAuthBaseUrl() {
-  return AUTH_BASE_URL;
+  return config.api.baseURL;
 }

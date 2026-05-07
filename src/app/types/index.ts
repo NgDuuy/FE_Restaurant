@@ -41,30 +41,78 @@ export interface Combo {
 }
 
 // Order Types
-export type OrderStatus = 'new' | 'cooking' | 'ready' | 'served' | 'cancelled';
+export type OrderStatus = 'CREATED' | 'COOKING' | 'READY' | 'SERVED';
 
-export interface OrderNote {
-  type: 'special' | 'allergy';
-  content: string;
-}
-
-export interface OrderItem {
-  id: string;
+export interface OrderItemRequest {
   menuItemId: string;
-  menuItem: MenuItem;
+  name: string;
   quantity: number;
-  notes: OrderNote[];
-  customizations?: string;
+  customizations?: string[];
 }
 
-export interface Order {
-  id: string;
+export interface OrderItemResponse {
+  id: number;
+  menuItemId: string;
+  name: string;
+  quantity: number;
+  customizations?: string[];
+}
+
+export interface CreateOrderRequest {
   tableNumber: string;
-  items: OrderItem[];
+  staffName: string;
+  items: OrderItemRequest[];
+}
+
+export interface OrderResponse {
+  id: number;
+  tableNumber: string;
+  staffName: string;
   status: OrderStatus;
-  serverId: string;
-  serverName: string;
-  createdAt: Date;
-  updatedAt: Date;
-  total: number;
+  timestamp: string;
+  items: OrderItemResponse[];
+}
+
+// Kitchen Ticket Types (for WebSocket)
+export interface KitchenTicketItem {
+  menuItemId: string;
+  itemName: string;
+  quantity: number;
+  status: OrderStatus;
+  customizations?: string[];
+  notes?: string[];
+}
+
+export interface KitchenTicket {
+  id: string;
+  tableNumber: number;
+  waiterId: string;
+  status: OrderStatus;
+  receivedAt: string;
+  completedAt?: string;
+  items: KitchenTicketItem[];
+}
+
+// WebSocket Events
+export interface NewTicketEvent {
+  id: string;
+  tableNumber: number;
+  waiterId: string;
+  status: OrderStatus;
+  receivedAt: string;
+  items: KitchenTicketItem[];
+}
+
+export interface TicketUpdateEvent {
+  id: string;
+  tableNumber: number;
+  waiterId: string;
+  status: OrderStatus;
+  receivedAt: string;
+  completedAt?: string;
+  items: KitchenTicketItem[];
+}
+
+export interface CompletedTicketEvent {
+  ticketId: string;
 }
