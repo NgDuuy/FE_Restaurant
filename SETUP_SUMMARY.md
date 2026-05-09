@@ -208,7 +208,8 @@ Edit `src/app/config/config.ts`:
 ```tsx
 export const config = {
   api: {
-    baseURL: 'https://api-gateway-606057767170.asia-southeast1.run.app',
+    // baseURL: 'https://api-gateway-606057767170.asia-southeast1.run.app',
+    baseURL: 'http://localhost:8080',
     // or local: 'http://localhost:8080'
   },
   websocket: {

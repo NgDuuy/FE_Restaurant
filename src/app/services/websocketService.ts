@@ -57,8 +57,10 @@ class WebSocketService {
 
         try {
             const { Client } = await import('@stomp/stompjs');
+            const token = localStorage.getItem(config.auth.tokenKey);
             this.client = new Client({
                 brokerURL: this.url,
+                connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
                 reconnectDelay: config.websocket.reconnectDelay,
                 onConnect: () => this._onConnect(),
                 onStompError: (frame: any) => this._onError(frame),

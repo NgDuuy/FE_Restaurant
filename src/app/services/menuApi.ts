@@ -115,14 +115,14 @@ export function createCategory(body: CategoryRequestDTO) {
 }
 
 export function updateCategory(categoryId: string, body: CategoryRequestDTO) {
-  return request<CategoryResponseDTO>(`/api/categories/${categoryId}`, {
+  return request<CategoryResponseDTO>(`/api/menu/categories/${categoryId}`, {
     method: 'PUT',
     body: JSON.stringify(body),
   });
 }
 
 export function deleteCategory(categoryId: string) {
-  return request<void>(`/api/categories/${categoryId}`, {
+  return request<void>(`/api/menu/categories/${categoryId}`, {
     method: 'DELETE',
   });
 }

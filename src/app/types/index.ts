@@ -19,7 +19,7 @@ export interface MenuItem {
   categoryId?: string;
   price: number;
   available: boolean;
-  preparationTime: number; // minutes
+  preparationTime: number;
   description?: string;
   image?: string;
 }
@@ -35,13 +35,20 @@ export interface Combo {
   id: string;
   name: string;
   nameVi: string;
-  items: string[]; // MenuItem IDs
+  items: string[];
   price: number;
   available: boolean;
 }
 
 // Order Types
-export type OrderStatus = 'CREATED' | 'COOKING' | 'READY' | 'SERVED';
+export type OrderStatus =
+  | 'PENDING'
+  | 'CONFIRM'
+  | 'CREATED'
+  | 'COOKING'
+  | 'READY'
+  | 'SERVED'
+  | 'REJECT';
 
 export interface OrderItemRequest {
   menuItemId: string;
@@ -56,6 +63,7 @@ export interface OrderItemResponse {
   name: string;
   quantity: number;
   customizations?: string[];
+  notes?: string[];
 }
 
 export interface CreateOrderRequest {
@@ -73,7 +81,7 @@ export interface OrderResponse {
   items: OrderItemResponse[];
 }
 
-// Kitchen Ticket Types (for WebSocket)
+// Kitchen Ticket Types
 export interface KitchenTicketItem {
   menuItemId: string;
   itemName: string;
@@ -93,7 +101,6 @@ export interface KitchenTicket {
   items: KitchenTicketItem[];
 }
 
-// WebSocket Events
 export interface NewTicketEvent {
   id: string;
   tableNumber: number;

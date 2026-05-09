@@ -6,9 +6,9 @@
 export const config = {
     // API Gateway
     api: {
-        baseURL: 'https://api-gateway-606057767170.asia-southeast1.run.app',
+        // baseURL: 'https://api-gateway-606057767170.asia-southeast1.run.app',
         // Local development (uncomment to use)
-        // baseURL: 'http://localhost:8080',
+        baseURL: 'http://localhost:8080',
     },
 
     // WebSocket Configuration
@@ -43,8 +43,8 @@ export const config = {
             getAvailability: (id: string) => `/api/menu/${id}/availability`,
         },
         categories: {
-            getAll: '/api/categories',
-            getById: (id: string) => `/api/categories/${id}`,
+            getAll: '/api/menu/categories',
+            getById: (id: string) => `/api/menu/categories/${id}`,
         },
         promotions: {
             getAll: '/api/promotions',
