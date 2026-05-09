@@ -6,9 +6,9 @@
 export const config = {
     // API Gateway
     api: {
-        baseURL: 'https://api-gateway-606057767170.asia-southeast1.run.app',
+        // baseURL: 'https://api-gateway-606057767170.asia-southeast1.run.app',
         // Local development (uncomment to use)
-        // baseURL: 'http://localhost:8080',
+        baseURL: 'http://localhost:8080',
     },
 
     // WebSocket Configuration

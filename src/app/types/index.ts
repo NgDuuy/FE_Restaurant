@@ -40,6 +40,15 @@ export interface Combo {
   available: boolean;
 }
 
+export type KitchenTicketStatus = 
+  | 'PENDING' 
+  | 'KITCHEN_PENDING' 
+  | 'COOKING' 
+  | 'KITCHEN_COOKING' 
+  | 'READY' 
+  | 'KITCHEN_READY' 
+  | 'SERVED';
+
 // Order Types
 export type OrderStatus = 'CREATED' | 'COOKING' | 'READY' | 'SERVED';
 
@@ -87,7 +96,7 @@ export interface KitchenTicket {
   id: string;
   tableNumber: number;
   waiterId: string;
-  status: OrderStatus;
+  status: KitchenTicketStatus;  // Dùng type riêng thay vì OrderStatus
   receivedAt: string;
   completedAt?: string;
   items: KitchenTicketItem[];
