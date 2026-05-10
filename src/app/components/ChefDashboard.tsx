@@ -44,23 +44,20 @@ export function ChefDashboard() {
   const { tickets, fetchActiveTickets, updateTicketStatus, wsConnected } = useKDS();
   const { menuItems } = useMenu();
 
-  // State lưu lịch sử các ticket đã hoàn thành (READY, SERVED, REJECT)
+  // State saves tickets that have reached READY or DONE
   const [completedTickets, setCompletedTickets] = useState<KitchenTicket[]>([]);
 
   useEffect(() => {
     void fetchActiveTickets();
   }, [fetchActiveTickets]);
 
-  // Lắng nghe tickets thay đổi để lưu lại các ticket đã hoàn thành
   useEffect(() => {
     const currentTickets = Array.from(tickets.values());
     
-    // Lọc các ticket đã hoàn thành (READY, SERVED, REJECT)
     const newCompleted = currentTickets.filter(
       (t) => READY_STATUSES.includes(t.status) || DONE_STATUSES.includes(t.status)
     );
     
-    // Cập nhật completedTickets, tránh duplicate
     setCompletedTickets((prev) => {
       const existingIds = new Set(prev.map(t => t.id));
       const added = newCompleted.filter(t => !existingIds.has(t.id));
@@ -68,21 +65,17 @@ export function ChefDashboard() {
     });
   }, [tickets]);
 
-  // Active tickets (chưa hoàn thành) - không bao gồm READY và DONE
   const activeTickets = Array.from(tickets.values()).filter(
     (t) => !READY_STATUSES.includes(t.status) && !DONE_STATUSES.includes(t.status)
   );
   
-  // Phân loại active tickets cho 2 cột đầu
   const newOrders = activeTickets.filter((t) => NEW_STATUSES.includes(t.status));
   const cookingOrders = activeTickets.filter((t) => COOKING_STATUSES.includes(t.status));
   
-  // Lấy ready và done từ completedTickets (lịch sử)
   const readyOrders = completedTickets.filter((t) => READY_STATUSES.includes(t.status));
   const doneOrders = completedTickets.filter((t) => DONE_STATUSES.includes(t.status));
 
   const changeStatus = async (ticket: KitchenTicket, status: OrderStatus) => {
-    // Lưu lại ticket hiện tại vào completedTickets trước khi update
     if (status === 'READY' || status === 'SERVED' || status === 'REJECT') {
       setCompletedTickets((prev) => {
         const exists = prev.some(t => t.id === ticket.id);
@@ -161,7 +154,6 @@ export function ChefDashboard() {
         </ScrollArea>
 
         <Separator />
-        {/* Chỉ hiển thị nút action cho ticket chưa hoàn thành */}
         {NEW_STATUSES.includes(ticket.status) && (
           <Button className="w-full" onClick={() => changeStatus(ticket, "COOKING")}>
             <PlayCircle className="h-4 w-4 mr-2" />
@@ -174,7 +166,6 @@ export function ChefDashboard() {
             Mark Ready
           </Button>
         )}
-        {/* READY tickets vẫn hiển thị nút để chuyển thành SERVED/REJECT */}
         {ticket.status === "READY" && (
           <div className="grid grid-cols-2 gap-2">
             <Button className="w-full" onClick={() => changeStatus(ticket, "SERVED")}>

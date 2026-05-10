@@ -24,7 +24,6 @@ export async function getActiveTickets(): Promise<KitchenTicket[]> {
 
   const tickets = await response.json();
 
-  // Normalize status cho mỗi ticket
   return tickets.map((ticket: any) => ({
     ...ticket,
     status: ticket.status === "KITCHEN_PENDING" ? "PENDING" : ticket.status,
