@@ -32,10 +32,6 @@ export function ChefDashboard() {
 
   useEffect(() => {
     void fetchAllOrders();
-    const interval = setInterval(() => {
-      void fetchAllOrders();
-    }, 10000);
-    return () => clearInterval(interval);
   }, [fetchAllOrders]);
 
   const allOrders = Array.from(orders.values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());

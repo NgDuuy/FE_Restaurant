@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { OrderResponse, CreateOrderRequest, OrderStatus, NewTicketEvent, TicketUpdateEvent } from '../types';
 import * as orderApi from '../services/orderApi';
+import { websocketService } from '../services/websocketService';
+import { getOrderWebSocketUrl, getWebSocketUrl } from '../config/config';
+import { orderWebsocketService } from '../services/orderWebsocketService';
 
 interface OrderContextType {
   orders: Map<number, OrderResponse>;
@@ -23,9 +26,29 @@ const OrderContext = createContext<OrderContextType | undefined>(undefined);
 
 export function OrderProvider({ children }: { children: ReactNode }) {
   const [orders, setOrders] = useState<Map<number, OrderResponse>>(new Map());
-  const [liveTickets] = useState<Map<string, NewTicketEvent | TicketUpdateEvent>>(new Map());
+  const [liveTickets, setLiveTickets] = useState<Map<string, NewTicketEvent | TicketUpdateEvent>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [kdsWsConnected, setKdsWsConnected] = useState(false);
+  const [orderWsConnected, setOrderWsConnected] = useState(false);
+
+  const mapTicketToOrder = useCallback((ticket: NewTicketEvent | TicketUpdateEvent): OrderResponse => {
+    return {
+      id: Number(ticket.id),
+      tableNumber: String(ticket.tableNumber),
+      staffName: ticket.waiterId || 'Server',
+      status: ticket.status,
+      timestamp: ticket.receivedAt,
+      items: ticket.items.map((item, index) => ({
+        id: index + 1,
+        menuItemId: item.menuItemId,
+        name: item.itemName,
+        quantity: item.quantity,
+        customizations: item.customizations ?? [],
+        notes: item.notes ?? [],
+      })),
+    };
+  }, []);
 
   const createOrder = useCallback(async (request: CreateOrderRequest): Promise<OrderResponse> => {
     setIsLoading(true);
@@ -88,8 +111,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       });
     }
     await orderApi.updateKitchenTicketStatus(ticketId, status);
-    void fetchAllOrders();
-  }, [fetchAllOrders]);
+  }, []);
 
   const getOrdersByStatus = useCallback((status: OrderStatus): OrderResponse[] => {
     return Array.from(orders.values()).filter((order) => order.status === status);
@@ -101,13 +123,80 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
   const clearError = useCallback(() => setError(null), []);
 
-  // Kept for backward compatibility; websocket removed by request.
-  const connectWebSocket = useCallback(async () => Promise.resolve(), []);
-  const disconnectWebSocket = useCallback(() => {}, []);
+  const connectWebSocket = useCallback(async () => {
+    const tasks: Promise<void>[] = [];
+
+    if (!websocketService.isConnected()) {
+      tasks.push(
+        websocketService.connect({
+          url: getWebSocketUrl(),
+          onNewTicket: (ticket) => {
+            setLiveTickets((prev) => new Map(prev).set(String(ticket.id), ticket));
+            const mapped = mapTicketToOrder(ticket);
+            if (!Number.isNaN(mapped.id)) {
+              setOrders((prev) => new Map(prev).set(mapped.id, mapped));
+            }
+          },
+          onTicketUpdate: (ticket) => {
+            setLiveTickets((prev) => new Map(prev).set(String(ticket.id), ticket));
+            const mapped = mapTicketToOrder(ticket);
+            if (!Number.isNaN(mapped.id)) {
+              setOrders((prev) => new Map(prev).set(mapped.id, mapped));
+            }
+          },
+          onCompletedTicket: () => {
+            void fetchAllOrders();
+          },
+          onConnectionChange: (connected) => {
+            setKdsWsConnected(connected);
+          },
+        })
+      );
+    } else {
+      setKdsWsConnected(true);
+    }
+
+    if (!orderWebsocketService.isConnected()) {
+      tasks.push(
+        orderWebsocketService.connect({
+          url: getOrderWebSocketUrl(),
+          onOrderStatus: (message) => {
+            const orderId = Number(message.orderId);
+            const status = message.status as OrderStatus;
+            if (Number.isNaN(orderId)) return;
+            setOrders((prev) => {
+              const updated = new Map(prev);
+              const current = updated.get(orderId);
+              if (current) {
+                updated.set(orderId, { ...current, status });
+              }
+              return updated;
+            });
+          },
+          onConnectionChange: (connected) => {
+            setOrderWsConnected(connected);
+          },
+        })
+      );
+    } else {
+      setOrderWsConnected(true);
+    }
+
+    await Promise.all(tasks);
+  }, [fetchAllOrders, mapTicketToOrder]);
+
+  const disconnectWebSocket = useCallback(() => {
+    websocketService.disconnect();
+    orderWebsocketService.disconnect();
+    setKdsWsConnected(false);
+    setOrderWsConnected(false);
+  }, []);
 
   useEffect(() => {
     void fetchAllOrders();
-  }, [fetchAllOrders]);
+    void connectWebSocket();
+    return () => disconnectWebSocket();
+  }, [connectWebSocket, disconnectWebSocket, fetchAllOrders]);
 
   return (
     <OrderContext.Provider
@@ -116,7 +205,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         liveTickets,
         isLoading,
         error,
-        wsConnected: false,
+        wsConnected: kdsWsConnected || orderWsConnected,
         createOrder,
         fetchAllOrders,
         fetchOrderById,

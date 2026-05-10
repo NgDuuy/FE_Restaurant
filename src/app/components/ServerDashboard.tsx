@@ -38,8 +38,6 @@ export function ServerDashboard() {
 
   useEffect(() => {
     void fetchAllOrders();
-    const interval = setInterval(() => void fetchAllOrders(), 10000);
-    return () => clearInterval(interval);
   }, [fetchAllOrders]);
 
   const categories = [
@@ -110,7 +108,6 @@ export function ServerDashboard() {
   const handleUpdateOrderStatus = async (orderId: number, status: OrderStatus) => {
     try {
       await updateKitchenTicketStatus(orderId, status);
-      await fetchAllOrders();
       toast.success(`Order #${orderId} updated to ${status}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update status');
