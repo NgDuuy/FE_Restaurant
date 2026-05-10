@@ -41,7 +41,8 @@ export interface Combo {
 }
 
 // Order Types
-export type OrderStatus =
+export type OrderStatus = 
+  | 'KITCHEN_PENDING'
   | 'PENDING'
   | 'CONFIRM'
   | 'CREATED'

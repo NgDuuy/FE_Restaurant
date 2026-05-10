@@ -120,4 +120,12 @@ export function getOrderWebSocketUrl(): string {
     return `${wsBase}${config.endpoints.orders.websocket}`;
 }
 
+export function getKDSWebSocketUrl(): string {
+    const wsBase = config.api.baseURL
+        .replace(/^https:\/\//, 'wss://')
+        .replace(/^http:\/\//, 'ws://');
+    
+    return `${wsBase}${config.endpoints.kds.websocket}`;
+}
+
 export default config;

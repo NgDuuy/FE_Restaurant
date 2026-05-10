@@ -1,5 +1,6 @@
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { OrderProvider } from './contexts/OrderContext';
+import { KDSProvider } from './contexts/KdsContext';
 import { MenuProvider } from './contexts/MenuContext';
 import { Login } from './components/Login';
 import { ServerDashboard } from './components/ServerDashboard';
@@ -31,8 +32,10 @@ export default function App() {
     <AuthProvider>
       <MenuProvider>
         <OrderProvider>
-          <AppContent />
-          <Toaster />
+          <KDSProvider>
+            <AppContent />
+            <Toaster />
+          </KDSProvider>
         </OrderProvider>
       </MenuProvider>
     </AuthProvider>
