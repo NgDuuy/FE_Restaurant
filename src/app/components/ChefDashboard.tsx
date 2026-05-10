@@ -89,7 +89,12 @@ export function ChefDashboard() {
     await updateTicketStatus(ticket.id, status);
   };
 
-  const menuById = new Map(menuItems.map((m) => [m.id, m]));
+  const getTimeElapsed = (dateString: string) => {
+    return formatDistanceToNow(new Date(dateString), {
+      locale: vi,
+      addSuffix: true,
+    });
+  };
 
   const OrderCard = ({ ticket }: { ticket: KitchenTicket }) => (
     <Card>
@@ -176,10 +181,6 @@ export function ChefDashboard() {
               Reject
             </Button>
           </div>
-        )}
-      </CardContent>
-    </Card>
-  );
 
   const Column = ({
     title,
@@ -204,6 +205,7 @@ export function ChefDashboard() {
           <Badge variant="secondary">{count}</Badge>
         </div>
       </div>
+
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-3">
           {data.length === 0 ? (
@@ -218,8 +220,20 @@ export function ChefDashboard() {
     </div>
   );
 
+  if (isLoading && tickets.length === 0) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <div className="text-center">
+          <ChefHat className="h-12 w-12 animate-pulse mx-auto mb-4" />
+          <p className="text-muted-foreground">Đang tải đơn hàng...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col bg-white">
+      {/* Header */}
       <div className="bg-white border-b px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -232,6 +246,11 @@ export function ChefDashboard() {
                 Chef: {user?.name} {wsConnected ? "🟢" : "🔴"}
               </p>
             </div>
+
+            <Button variant="outline" onClick={logout}>
+              <LogOut className="h-4 w-4 mr-2" />
+              Đăng xuất
+            </Button>
           </div>
           <Button
             variant="outline"
