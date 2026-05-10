@@ -280,10 +280,10 @@ export function ChefDashboard() {
               </Button>
             )}
           </div>
-        </CardContent>
-      </Card>
-    );
-  };
+        )}
+      </CardContent>
+    </Card>
+  );
 
   const KanbanColumn = ({
     title,
@@ -301,14 +301,10 @@ export function ChefDashboard() {
     <div className="flex-1 flex flex-col min-w-0 bg-slate-50 rounded-lg border">
       <div className={`p-4 border-b bg-white rounded-t-lg ${color}`}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Icon className="h-5 w-5" />
-            <h3 className="font-semibold">{title}</h3>
-          </div>
+          <div className="flex items-center gap-2"><Icon className="h-5 w-5" /><h3 className="font-semibold">{title}</h3></div>
           <Badge variant="secondary">{count}</Badge>
         </div>
       </div>
-
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-3">
           {tickets.length === 0 ? (
@@ -339,7 +335,6 @@ export function ChefDashboard() {
 
   return (
     <div className="h-screen flex flex-col bg-white">
-      {/* Header */}
       <div className="bg-white border-b px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
@@ -392,12 +387,9 @@ export function ChefDashboard() {
                 <div className="text-xs text-muted-foreground">Sẵn sàng</div>
               </div>
             </div>
-
-            <Button variant="outline" onClick={logout}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Đăng xuất
-            </Button>
           </div>
+          <Button variant="outline" onClick={() => void fetchAllOrders()} className="mr-2">Refresh</Button>
+          <Button variant="outline" onClick={logout}><LogOut className="h-4 w-4 mr-2" />Logout</Button>
         </div>
       </div>
 

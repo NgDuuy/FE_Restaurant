@@ -35,6 +35,10 @@ export const config = {
             create: '/api/orders',
             getAll: '/api/orders',
             getById: (id: number) => `/api/orders/${id}`,
+            websocket: '/ws/order',
+            topics: {
+                statusAll: '/topic/orders/status',
+            },
         },
         menu: {
             getAll: '/api/menu',
@@ -43,8 +47,8 @@ export const config = {
             getAvailability: (id: string) => `/api/menu/${id}/availability`,
         },
         categories: {
-            getAll: '/api/categories',
-            getById: (id: string) => `/api/categories/${id}`,
+            getAll: '/api/menu/categories',
+            getById: (id: string) => `/api/menu/categories/${id}`,
         },
         promotions: {
             getAll: '/api/promotions',
@@ -106,6 +110,14 @@ export function getWebSocketUrl(): string {
         .replace(/^http:\/\//, 'ws://');
 
     return `${wsBase}${config.endpoints.kds.websocket}`;
+}
+
+export function getOrderWebSocketUrl(): string {
+    const wsBase = config.api.baseURL
+        .replace(/^https:\/\//, 'wss://')
+        .replace(/^http:\/\//, 'ws://');
+
+    return `${wsBase}${config.endpoints.orders.websocket}`;
 }
 
 export default config;

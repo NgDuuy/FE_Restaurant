@@ -1,4 +1,4 @@
-import { CreateOrderRequest, OrderResponse } from '../types';
+import { CreateOrderRequest, OrderResponse, OrderStatus } from '../types';
 import { config, getApiUrl } from '../config/config';
 
 const AUTH_TOKEN_KEY = config.auth.tokenKey;
@@ -6,16 +6,13 @@ const AUTH_TOKEN_KEY = config.auth.tokenKey;
 function getAuthHeaders(): HeadersInit {
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     return {
-        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
 }
 
 /**
  * Create a new order
- * @param request - Order creation request with table number, staff name and items
- * @returns Created OrderResponse with id and status CREATED
- * @throws Error if validation fails (422) or unauthorized (401/403)
  */
 export async function createOrder(request: CreateOrderRequest): Promise<OrderResponse> {
     try {
@@ -27,10 +24,8 @@ export async function createOrder(request: CreateOrderRequest): Promise<OrderRes
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(
-                `Order creation failed: ${response.status} - ${error.error || error.message || 'Unknown error'}`
-            );
+            const errorText = await response.text();
+            throw new Error(`Order creation failed: ${response.status} - ${errorText || 'Unknown error'}`);
         }
 
         return await response.json();
@@ -42,7 +37,6 @@ export async function createOrder(request: CreateOrderRequest): Promise<OrderRes
 
 /**
  * Get all orders
- * @returns Array of all orders
  */
 export async function getAllOrders(): Promise<OrderResponse[]> {
     try {
@@ -65,8 +59,6 @@ export async function getAllOrders(): Promise<OrderResponse[]> {
 
 /**
  * Get order by ID
- * @param orderId - The numeric order ID
- * @returns OrderResponse with all details
  */
 export async function getOrderById(orderId: number): Promise<OrderResponse> {
     try {
@@ -87,5 +79,23 @@ export async function getOrderById(orderId: number): Promise<OrderResponse> {
     } catch (error) {
         console.error(`Get order ${orderId} error:`, error);
         throw error;
+    }
+}
+
+/**
+ * Update kitchen ticket status
+ */
+export async function updateKitchenTicketStatus(ticketId: string | number, status: OrderStatus): Promise<void> {
+    const id = String(ticketId);
+    const url = getApiUrl(config.endpoints.kds.updateStatus(id));
+    const response = await fetch(url, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ status }),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to update ticket ${id}: ${response.status} - ${errorText || 'Unknown error'}`);
     }
 }
