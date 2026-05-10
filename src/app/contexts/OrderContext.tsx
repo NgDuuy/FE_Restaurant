@@ -1,26 +1,23 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { OrderResponse, CreateOrderRequest, OrderStatus, NewTicketEvent, TicketUpdateEvent } from '../types';
 import * as orderApi from '../services/orderApi';
 import { websocketService } from '../services/websocketService';
-import { getWebSocketUrl } from '../config/config';
+import { getOrderWebSocketUrl, getWebSocketUrl } from '../config/config';
+import { orderWebsocketService } from '../services/orderWebsocketService';
 
 interface OrderContextType {
-  // State
   orders: Map<number, OrderResponse>;
   liveTickets: Map<string, NewTicketEvent | TicketUpdateEvent>;
   isLoading: boolean;
   error: string | null;
   wsConnected: boolean;
-
-  // Actions
   createOrder: (request: CreateOrderRequest) => Promise<OrderResponse>;
   fetchAllOrders: () => Promise<void>;
   fetchOrderById: (orderId: number) => Promise<OrderResponse>;
+  updateKitchenTicketStatus: (ticketId: string | number, status: OrderStatus) => Promise<void>;
   getOrdersByStatus: (status: OrderStatus) => OrderResponse[];
   getOrdersByTable: (tableNumber: string) => OrderResponse[];
   clearError: () => void;
-
-  // WebSocket connection
   connectWebSocket: () => Promise<void>;
   disconnectWebSocket: () => void;
 }
@@ -32,323 +29,214 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const [liveTickets, setLiveTickets] = useState<Map<string, NewTicketEvent | TicketUpdateEvent>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [wsConnected, setWsConnected] = useState(false);
+  const [kdsWsConnected, setKdsWsConnected] = useState(false);
+  const [orderWsConnected, setOrderWsConnected] = useState(false);
 
-  /**
-   * Create a new order
-   */
-  const createOrder = useCallback(
-    async (request: CreateOrderRequest): Promise<OrderResponse> => {
-      setIsLoading(true);
-      setError(null);
+  const mapTicketToOrder = useCallback((ticket: NewTicketEvent | TicketUpdateEvent): OrderResponse => {
+    return {
+      id: Number(ticket.id),
+      tableNumber: String(ticket.tableNumber),
+      staffName: ticket.waiterId || 'Server',
+      status: ticket.status,
+      timestamp: ticket.receivedAt,
+      items: ticket.items.map((item, index) => ({
+        id: index + 1,
+        menuItemId: item.menuItemId,
+        name: item.itemName,
+        quantity: item.quantity,
+        customizations: item.customizations ?? [],
+        notes: item.notes ?? [],
+      })),
+    };
+  }, []);
 
-      try {
-        const order = await orderApi.createOrder(request);
-
-        // Add to local state
-        setOrders((prev) => {
-          const updated = new Map(prev);
-          updated.set(order.id, order);
-          return updated;
-        });
-
-        return order;
-      }
-      catch (err: unknown) {
-        if (err instanceof Error) {
-          setError(err.message);
-          throw err;
-        }
-
-        setError('Unknown error');
-        throw new Error('Unknown error');
-
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    []
-  );
-
-  /**
-   * Fetch all orders from server
-   */
-  const fetchAllOrders = useCallback(async () => {
+  const createOrder = useCallback(async (request: CreateOrderRequest): Promise<OrderResponse> => {
     setIsLoading(true);
     setError(null);
-
     try {
-      const fetchedOrders = await orderApi.getAllOrders();
-
-      // Convert array to Map for easier lookup
-      const ordersMap = new Map(fetchedOrders.map((order) => [order.id, order]));
-      setOrders(ordersMap);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to fetch orders';
+      const order = await orderApi.createOrder(request);
+      setOrders((prev) => new Map(prev).set(order.id, order));
+      return order;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
-      throw err;
+      throw new Error(message);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  /**
-   * Fetch single order by ID
-   */
-  const fetchOrderById = useCallback(
-    async (orderId: number): Promise<OrderResponse> => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const order = await orderApi.getOrderById(orderId);
-
-        // Update in local state
-        setOrders((prev) => {
-          const updated = new Map(prev);
-          updated.set(order.id, order);
-          return updated;
-        });
-
-        return order;
-      }
-      catch (err: unknown) {
-        const message =
-          err instanceof Error
-            ? err.message
-            : 'Unknown error';
-
-        setError(message);
-
-        throw new Error(message);
-      }
-      finally {
-        setIsLoading(false);
-      }
-    },
-    []
-  );
-
-  /**
-   * Get all orders with specific status
-   */
-  const getOrdersByStatus = useCallback(
-    (status: OrderStatus): OrderResponse[] => {
-      return Array.from(orders.values()).filter((order) => order.status === status);
-    },
-    [orders]
-  );
-
-  /**
-   * Get all orders for specific table
-   */
-  const getOrdersByTable = useCallback(
-    (tableNumber: string): OrderResponse[] => {
-      return Array.from(orders.values()).filter((order) => order.tableNumber === tableNumber);
-    },
-    [orders]
-  );
-
-  /**
-   * Clear error message
-   */
-  const clearError = useCallback(() => {
+  const fetchAllOrders = useCallback(async () => {
+    setIsLoading(true);
     setError(null);
+    try {
+      const fetchedOrders = await orderApi.getAllOrders();
+      setOrders(new Map(fetchedOrders.map((order) => [order.id, order])));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch orders';
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
-  /**
-   * Connect to WebSocket for real-time updates
-   */
-  const connectWebSocket = useCallback(async () => {
+  const fetchOrderById = useCallback(async (orderId: number): Promise<OrderResponse> => {
+    setIsLoading(true);
+    setError(null);
     try {
-      await websocketService.connect({
-        url: getWebSocketUrl(),
-        onNewTicket: (ticket: NewTicketEvent) => {
-          console.log('New ticket from WebSocket:', ticket);
+      const order = await orderApi.getOrderById(orderId);
+      setOrders((prev) => new Map(prev).set(order.id, order));
+      return order;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-          // Update orders based on ticket status
-          setOrders((prev) => {
-            const updated = new Map(prev);
-            const orderId = parseInt(ticket.id);
-
-            if (updated.has(orderId)) {
-              const order = updated.get(orderId)!;
-              updated.set(orderId, {
-                ...order,
-                status: ticket.status,
-              });
-            }
-
-            return updated;
-          });
-
-          // Also store ticket for kitchen display
-          setLiveTickets((prev) => {
-            const updated = new Map(prev);
-            updated.set(ticket.id, ticket);
-            return updated;
-          });
-        },
-
-        onTicketUpdate: (ticket: TicketUpdateEvent) => {
-          console.log('Ticket update from WebSocket:', ticket);
-
-          // Update orders
-          setOrders((prev) => {
-            const updated = new Map(prev);
-            const orderId = parseInt(ticket.id);
-
-            if (updated.has(orderId)) {
-              const order = updated.get(orderId)!;
-              updated.set(orderId, {
-                ...order,
-                status: ticket.status,
-              });
-            }
-
-            return updated;
-          });
-
-          // Update ticket
-          setLiveTickets((prev) => {
-            const updated = new Map(prev);
-            updated.set(ticket.id, ticket);
-            return updated;
-          });
-        },
-
-        onCompletedTicket: (ticketId: string) => {
-          console.log('Ticket completed:', ticketId);
-
-          // Update ticket status to READY/SERVED
-          setLiveTickets((prev) => {
-            const updated = new Map(prev);
-            const ticket = updated.get(ticketId);
-
-            if (ticket) {
-              updated.set(ticketId, {
-                ...ticket,
-                status: 'READY' as OrderStatus,
-                completedAt: new Date().toISOString(),
-              });
-            }
-
-            return updated;
-          });
-
-          // Update order status
-          setOrders((prev) => {
-            const updated = new Map(prev);
-            const orderId = parseInt(ticketId);
-
-            if (updated.has(orderId)) {
-              const order = updated.get(orderId)!;
-              updated.set(orderId, {
-                ...order,
-                status: 'READY',
-              });
-            }
-
-            return updated;
-          });
-        },
-
-        onConnectionChange: (isConnected: boolean) => {
-          console.log('WebSocket connection status:', isConnected);
-          setWsConnected(isConnected);
-        },
+  const updateKitchenTicketStatus = useCallback(async (ticketId: string | number, status: OrderStatus) => {
+    setError(null);
+    const idNum = Number(ticketId);
+    if (!Number.isNaN(idNum)) {
+      setOrders((prev) => {
+        const updated = new Map(prev);
+        const current = updated.get(idNum);
+        if (current) {
+          updated.set(idNum, { ...current, status });
+        }
+        return updated;
       });
     }
-    catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'Unknown error';
-
-      setError(message);
-
-      throw new Error(message);
-    }
+    await orderApi.updateKitchenTicketStatus(ticketId, status);
   }, []);
 
-  /**
-   * Disconnect from WebSocket
-   */
+  const getOrdersByStatus = useCallback((status: OrderStatus): OrderResponse[] => {
+    return Array.from(orders.values()).filter((order) => order.status === status);
+  }, [orders]);
+
+  const getOrdersByTable = useCallback((tableNumber: string): OrderResponse[] => {
+    return Array.from(orders.values()).filter((order) => order.tableNumber === tableNumber);
+  }, [orders]);
+
+  const clearError = useCallback(() => setError(null), []);
+
+  const connectWebSocket = useCallback(async () => {
+    const tasks: Promise<void>[] = [];
+
+    if (!websocketService.isConnected()) {
+      tasks.push(
+        websocketService.connect({
+          url: getWebSocketUrl(),
+          onNewTicket: (ticket) => {
+            setLiveTickets((prev) => new Map(prev).set(String(ticket.id), ticket));
+            const mapped = mapTicketToOrder(ticket);
+            if (!Number.isNaN(mapped.id)) {
+              setOrders((prev) => new Map(prev).set(mapped.id, mapped));
+            }
+          },
+          onTicketUpdate: (ticket) => {
+            setLiveTickets((prev) => new Map(prev).set(String(ticket.id), ticket));
+            const mapped = mapTicketToOrder(ticket);
+            if (!Number.isNaN(mapped.id)) {
+              setOrders((prev) => new Map(prev).set(mapped.id, mapped));
+            }
+          },
+          onCompletedTicket: () => {
+            void fetchAllOrders();
+          },
+          onConnectionChange: (connected) => {
+            setKdsWsConnected(connected);
+          },
+        })
+      );
+    } else {
+      setKdsWsConnected(true);
+    }
+
+    if (!orderWebsocketService.isConnected()) {
+      tasks.push(
+        orderWebsocketService.connect({
+          url: getOrderWebSocketUrl(),
+          onOrderStatus: (message) => {
+            const orderId = Number(message.orderId);
+            const status = message.status as OrderStatus;
+            if (Number.isNaN(orderId)) return;
+            setOrders((prev) => {
+              const updated = new Map(prev);
+              const current = updated.get(orderId);
+              if (current) {
+                updated.set(orderId, { ...current, status });
+              }
+              return updated;
+            });
+          },
+          onConnectionChange: (connected) => {
+            setOrderWsConnected(connected);
+          },
+        })
+      );
+    } else {
+      setOrderWsConnected(true);
+    }
+
+    await Promise.all(tasks);
+  }, [fetchAllOrders, mapTicketToOrder]);
+
   const disconnectWebSocket = useCallback(() => {
     websocketService.disconnect();
-    setWsConnected(false);
+    orderWebsocketService.disconnect();
+    setKdsWsConnected(false);
+    setOrderWsConnected(false);
   }, []);
 
-  // Auto-disconnect on unmount
   useEffect(() => {
-    return () => {
-      websocketService.disconnect();
-    };
-  }, []);
+    void fetchAllOrders();
+    void connectWebSocket();
+    return () => disconnectWebSocket();
+  }, [connectWebSocket, disconnectWebSocket, fetchAllOrders]);
 
-  const value: OrderContextType = {
-    orders,
-    liveTickets,
-    isLoading,
-    error,
-    wsConnected,
-    createOrder,
-    fetchAllOrders,
-    fetchOrderById,
-    getOrdersByStatus,
-    getOrdersByTable,
-    clearError,
-    connectWebSocket,
-    disconnectWebSocket,
-  };
-
-  return <OrderContext.Provider value={value}>{children}</OrderContext.Provider>;
+  return (
+    <OrderContext.Provider
+      value={{
+        orders,
+        liveTickets,
+        isLoading,
+        error,
+        wsConnected: kdsWsConnected || orderWsConnected,
+        createOrder,
+        fetchAllOrders,
+        fetchOrderById,
+        updateKitchenTicketStatus,
+        getOrdersByStatus,
+        getOrdersByTable,
+        clearError,
+        connectWebSocket,
+        disconnectWebSocket,
+      }}
+    >
+      {children}
+    </OrderContext.Provider>
+  );
 }
 
-/**
- * Hook to use OrderContext
- */
 export function useOrder() {
   const context = useContext(OrderContext);
-
-  if (context === undefined) {
-    throw new Error('useOrder must be used within OrderProvider');
-  }
-
+  if (context === undefined) throw new Error('useOrder must be used within OrderProvider');
   return context;
 }
 
-/**
- * Backwards compatibility hook - adapts new context to old interface
- * Used by existing components (ChefDashboard, ManagerDashboard, ServerDashboard)
- */
 export function useOrders() {
-  const context = useContext(OrderContext);
-
-  if (context === undefined) {
-    throw new Error('useOrders must be used within OrderProvider');
-  }
-
-  // Convert Map to array for backwards compatibility
+  const context = useOrder();
   const ordersArray = Array.from(context.orders.values());
-
   return {
     orders: ordersArray,
-    addOrder: async (orderData: any) => {
-      // Stub - new system uses API
-      console.warn('useOrders.addOrder() is deprecated, use useOrder().createOrder()');
-    },
-    updateOrderStatus: (orderId: string | number, status: string) => {
-      // Stub - new system updates via WebSocket from backend
-      console.warn(
-        'useOrders.updateOrderStatus() is deprecated and no longer needed. Status updates come from backend via WebSocket.'
-      );
-    },
-    getOrdersByStatus: (status: string) => {
-      return ordersArray.filter((order) => order.status === status);
-    },
-    cancelOrder: (orderId: string) => {
-      console.warn('useOrders.cancelOrder() is not supported in new API');
-    },
+    addOrder: async (orderData: any) => context.createOrder(orderData),
+    updateOrderStatus: async (orderId: string | number, status: string) =>
+      context.updateKitchenTicketStatus(orderId, status.toUpperCase() as OrderStatus),
+    getOrdersByStatus: (status: string) => ordersArray.filter((order) => order.status === (status.toUpperCase() as OrderStatus)),
+    cancelOrder: (_orderId: string) => console.warn('Cancel order not implemented'),
   };
 }
