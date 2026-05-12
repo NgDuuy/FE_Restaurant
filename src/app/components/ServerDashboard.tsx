@@ -6,6 +6,7 @@ import { MenuCategory, MenuItem, OrderStatus } from '../types';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
@@ -14,12 +15,22 @@ import { Search, Plus, Minus, Trash2, ShoppingCart, Send, LogOut } from 'lucide-
 import { toast } from 'sonner';
 
 type CartItem = { id: string; menuItem: MenuItem; quantity: number };
-const ACTIVE_SERVER_STATUSES: OrderStatus[] = ['PENDING', 'CONFIRM', 'CREATED', 'COOKING', 'READY'];
+const ACTIVE_SERVER_STATUSES: OrderStatus[] = [
+  'PENDING',
+  'CONFIRM',
+  'CREATED',
+  'KITCHEN_PENDING',
+  'WAIT_FOR_MENU_CONFIRM',
+  'COOKING',
+  'READY',
+];
 
 function getStatusLabel(status: OrderStatus): string {
   if (status === 'PENDING') return 'Pending';
   if (status === 'CONFIRM') return 'Confirmed';
   if (status === 'CREATED') return 'Created';
+  if (status === 'KITCHEN_PENDING') return 'Kitchen queue';
+  if (status === 'WAIT_FOR_MENU_CONFIRM') return 'Waiting menu';
   if (status === 'COOKING') return 'Cooking';
   if (status === 'READY') return 'Ready';
   if (status === 'SERVED') return 'Served';
@@ -35,6 +46,7 @@ export function ServerDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [tableNumber, setTableNumber] = useState('');
+  const [orderNote, setOrderNote] = useState('');
 
   useEffect(() => {
     void fetchAllOrders();
@@ -86,10 +98,12 @@ export function ServerDashboard() {
           quantity: item.quantity,
           customizations: [],
         })),
+        note: orderNote.trim() || undefined,
       });
       await fetchAllOrders();
       setCart([]);
       setTableNumber('');
+      setOrderNote('');
       toast.success('Order sent');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create order');
@@ -161,6 +175,10 @@ export function ServerDashboard() {
               <div className="border rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-4"><ShoppingCart className="h-5 w-5" /><h2 className="text-lg font-bold">Cart</h2><Badge variant="secondary">{cart.length}</Badge></div>
                 <div className="space-y-2"><Label htmlFor="tableNumber">Table Number</Label><Input id="tableNumber" placeholder="Enter table number" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} /></div>
+                <div className="space-y-2 mt-3">
+                  <Label htmlFor="orderNote">Ghi chú đơn hàng</Label>
+                  <Textarea id="orderNote" placeholder="Ví dụ: ít đá, mang ra cùng lúc..." value={orderNote} onChange={(e) => setOrderNote(e.target.value)} rows={3} className="resize-none" />
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -182,6 +200,12 @@ export function ServerDashboard() {
                         </div>
                         <Badge>{getStatusLabel(order.status)}</Badge>
                       </div>
+                      {order.note ? (
+                        <p className="text-xs rounded-md bg-amber-50 border border-amber-100 text-amber-950 px-2 py-1.5">
+                          <span className="font-medium">Ghi chú: </span>
+                          {order.note}
+                        </p>
+                      ) : null}
                       <div className="space-y-2">
                         {order.items.map((it) => {
                           const menu = menuById.get(it.menuItemId);
@@ -193,7 +217,6 @@ export function ServerDashboard() {
                                 </div>
                                 <div className="min-w-0">
                                   <p className="text-xs font-medium truncate">{it.name}</p>
-                                  <p className="text-[11px] text-muted-foreground truncate">{menu?.description || '-'}</p>
                                 </div>
                               </div>
                               <div className="text-right">
@@ -229,16 +252,19 @@ export function ServerDashboard() {
                         <p className="text-sm">Order #{order.id} - Table {order.tableNumber}</p>
                         <Badge variant="outline">{getStatusLabel(order.status)}</Badge>
                       </div>
+                      {order.note ? (
+                        <p className="text-xs text-amber-900 bg-amber-50 border border-amber-100 rounded px-2 py-1">
+                          <span className="font-medium">Ghi chú: </span>
+                          {order.note}
+                        </p>
+                      ) : null}
                       <div className="space-y-1">
-                        {order.items.map((it) => {
-                          const menu = menuById.get(it.menuItemId);
-                          return (
-                            <div key={it.id} className="flex items-center justify-between text-xs">
-                              <span className="truncate">{it.name} • {menu?.description || '-'}</span>
-                              <span>x{it.quantity}</span>
-                            </div>
-                          );
-                        })}
+                        {order.items.map((it) => (
+                          <div key={it.id} className="flex items-center justify-between text-xs">
+                            <span className="truncate">{it.name}</span>
+                            <span>x{it.quantity}</span>
+                          </div>
+                        ))}
                       </div>
                     </CardContent>
                   </Card>

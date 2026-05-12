@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
-import { OrderResponse, CreateOrderRequest, OrderStatus, NewTicketEvent, TicketUpdateEvent } from '../types';
+import { OrderResponse, OrderItemResponse, CreateOrderRequest, OrderStatus, NewTicketEvent, TicketUpdateEvent } from '../types';
 import * as orderApi from '../services/orderApi';
+import { normalizeOrderStatus } from '../utils/orderStatus';
 import { websocketService } from '../services/websocketService';
 import { getOrderWebSocketUrl, getWebSocketUrl } from '../config/config';
 import { orderWebsocketService } from '../services/orderWebsocketService';
@@ -32,21 +33,76 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const [kdsWsConnected, setKdsWsConnected] = useState(false);
   const [orderWsConnected, setOrderWsConnected] = useState(false);
 
+  const normalizeOrderNote = useCallback((order: OrderResponse): OrderResponse => {
+    const normalizedNote = order.note?.trim()
+      ? order.note
+      : order.orderNote?.trim()
+        ? order.orderNote
+        : order.notes?.length
+          ? order.notes.join(', ')
+          : undefined;
+
+    return {
+      ...order,
+      note: normalizedNote,
+    };
+  }, []);
+
+  const normalizeItemNotes = useCallback((item: OrderItemResponse): OrderItemResponse => ({
+    ...item,
+    notes: item.notes?.length
+      ? item.notes
+      : item.note
+        ? [item.note]
+        : [],
+  }), []);
+
+  const normalizeOrderResponse = useCallback((order: OrderResponse): OrderResponse => ({
+    ...normalizeOrderNote(order),
+    items: order.items.map(normalizeItemNotes),
+  }), [normalizeItemNotes, normalizeOrderNote]);
+
   const mapTicketToOrder = useCallback((ticket: NewTicketEvent | TicketUpdateEvent): OrderResponse => {
+    const orderNote = ticket.note ?? ticket.orderNote ?? (ticket.notes?.length ? ticket.notes.join(', ') : undefined);
     return {
       id: Number(ticket.id),
       tableNumber: String(ticket.tableNumber),
       staffName: ticket.waiterId || 'Server',
-      status: ticket.status,
+      status: normalizeOrderStatus(ticket.status),
       timestamp: ticket.receivedAt,
+      note: orderNote,
       items: ticket.items.map((item, index) => ({
         id: index + 1,
         menuItemId: item.menuItemId,
         name: item.itemName,
         quantity: item.quantity,
         customizations: item.customizations ?? [],
-        notes: item.notes ?? [],
+        notes: item.notes?.length ? item.notes : item.note ? [item.note] : [],
+        note: item.note,
       })),
+    };
+  }, []);
+
+  const preserveOrderNotes = useCallback((existingOrder: OrderResponse, incomingOrder: OrderResponse): OrderResponse => {
+    const orderNote = incomingOrder.note?.trim() ? incomingOrder.note : existingOrder.note;
+
+    const items = incomingOrder.items.map((incomingItem) => {
+      const existingItem = existingOrder.items.find(
+        (item) => item.id === incomingItem.id || (item.menuItemId === incomingItem.menuItemId && item.name === incomingItem.name)
+      );
+      return {
+        ...incomingItem,
+        customizations: incomingItem.customizations?.length
+          ? incomingItem.customizations
+          : existingItem?.customizations ?? [],
+        notes: incomingItem.notes?.length ? incomingItem.notes : existingItem?.notes ?? [],
+      };
+    });
+
+    return {
+      ...incomingOrder,
+      note: orderNote,
+      items,
     };
   }, []);
 
@@ -54,9 +110,19 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setError(null);
     try {
-      const order = await orderApi.createOrder(request);
-      setOrders((prev) => new Map(prev).set(order.id, order));
-      return order;
+      const rawOrder = await orderApi.createOrder(request);
+      const order = normalizeOrderResponse({
+        ...rawOrder,
+        status: normalizeOrderStatus(rawOrder.status),
+      });
+      const trimmedRequestNote = request.note?.trim();
+      const merged: OrderResponse = {
+        ...order,
+        status: normalizeOrderStatus(order.status),
+        note: order.note ?? (trimmedRequestNote ? trimmedRequestNote : undefined),
+      };
+      setOrders((prev) => new Map(prev).set(merged.id, merged));
+      return merged;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
@@ -71,7 +137,18 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const fetchedOrders = await orderApi.getAllOrders();
-      setOrders(new Map(fetchedOrders.map((order) => [order.id, order])));
+      const normalized = fetchedOrders.map((o) => normalizeOrderResponse({
+        ...o,
+        status: normalizeOrderStatus(o.status),
+      }));
+      setOrders((prev) => {
+        const next = new Map<number, OrderResponse>();
+        normalized.forEach((order) => {
+          const existing = prev.get(order.id);
+          next.set(order.id, existing ? preserveOrderNotes(existing, order) : order);
+        });
+        return next;
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to fetch orders';
       setError(message);
@@ -79,15 +156,24 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [preserveOrderNotes]);
 
   const fetchOrderById = useCallback(async (orderId: number): Promise<OrderResponse> => {
     setIsLoading(true);
     setError(null);
     try {
-      const order = await orderApi.getOrderById(orderId);
-      setOrders((prev) => new Map(prev).set(order.id, order));
-      return order;
+      const rawOrder = await orderApi.getOrderById(orderId);
+      const order = normalizeOrderResponse({
+        ...rawOrder,
+        status: normalizeOrderStatus(rawOrder.status),
+      });
+      let merged: OrderResponse = order;
+      setOrders((prev) => {
+        const existing = prev.get(order.id);
+        merged = existing ? preserveOrderNotes(existing, order) : order;
+        return new Map(prev).set(merged.id, merged);
+      });
+      return merged;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);
@@ -95,22 +181,31 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [preserveOrderNotes]);
 
   const updateKitchenTicketStatus = useCallback(async (ticketId: string | number, status: OrderStatus) => {
     setError(null);
     const idNum = Number(ticketId);
+    let snapshot: OrderResponse | undefined;
     if (!Number.isNaN(idNum)) {
       setOrders((prev) => {
-        const updated = new Map(prev);
-        const current = updated.get(idNum);
-        if (current) {
-          updated.set(idNum, { ...current, status });
-        }
-        return updated;
+        snapshot = prev.get(idNum);
+        if (!snapshot) return prev;
+        const next = new Map(prev);
+        next.set(idNum, { ...snapshot, status });
+        return next;
       });
     }
-    await orderApi.updateKitchenTicketStatus(ticketId, status);
+    try {
+      await orderApi.updateKitchenTicketStatus(ticketId, status);
+    } catch (err) {
+      if (!Number.isNaN(idNum) && snapshot) {
+        setOrders((prev) => new Map(prev).set(idNum, snapshot));
+      }
+      const message = err instanceof Error ? err.message : 'Failed to update kitchen ticket';
+      setError(message);
+      throw err;
+    }
   }, []);
 
   const getOrdersByStatus = useCallback((status: OrderStatus): OrderResponse[] => {
@@ -134,18 +229,33 @@ export function OrderProvider({ children }: { children: ReactNode }) {
             setLiveTickets((prev) => new Map(prev).set(String(ticket.id), ticket));
             const mapped = mapTicketToOrder(ticket);
             if (!Number.isNaN(mapped.id)) {
-              setOrders((prev) => new Map(prev).set(mapped.id, mapped));
+              setOrders((prev) => {
+                const cur = prev.get(mapped.id);
+                const withNote =
+                  mapped.note || !cur?.note ? mapped : { ...mapped, note: cur.note };
+                return new Map(prev).set(mapped.id, withNote);
+              });
             }
           },
           onTicketUpdate: (ticket) => {
             setLiveTickets((prev) => new Map(prev).set(String(ticket.id), ticket));
             const mapped = mapTicketToOrder(ticket);
             if (!Number.isNaN(mapped.id)) {
-              setOrders((prev) => new Map(prev).set(mapped.id, mapped));
+              setOrders((prev) => {
+                const cur = prev.get(mapped.id);
+                const withNote =
+                  mapped.note || !cur?.note ? mapped : { ...mapped, note: cur.note };
+                return new Map(prev).set(mapped.id, withNote);
+              });
             }
           },
-          onCompletedTicket: () => {
-            void fetchAllOrders();
+          onCompletedTicket: (ticketId) => {
+            const id = Number(ticketId);
+            if (!Number.isNaN(id)) {
+              void fetchOrderById(id).catch(() => {
+                /* đơn có thể đã xong khỏi KDS; đồng bộ từ ordering */
+              });
+            }
           },
           onConnectionChange: (connected) => {
             setKdsWsConnected(connected);
@@ -162,7 +272,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
           url: getOrderWebSocketUrl(),
           onOrderStatus: (message) => {
             const orderId = Number(message.orderId);
-            const status = message.status as OrderStatus;
+            const status = normalizeOrderStatus(message.status);
             if (Number.isNaN(orderId)) return;
             setOrders((prev) => {
               const updated = new Map(prev);
@@ -183,7 +293,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     }
 
     await Promise.all(tasks);
-  }, [fetchAllOrders, mapTicketToOrder]);
+  }, [fetchAllOrders, fetchOrderById, mapTicketToOrder]);
 
   const disconnectWebSocket = useCallback(() => {
     websocketService.disconnect();

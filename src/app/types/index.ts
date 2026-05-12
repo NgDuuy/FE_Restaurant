@@ -45,6 +45,8 @@ export type OrderStatus =
   | 'PENDING'
   | 'CONFIRM'
   | 'CREATED'
+  | 'KITCHEN_PENDING'
+  | 'WAIT_FOR_MENU_CONFIRM'
   | 'COOKING'
   | 'READY'
   | 'SERVED'
@@ -64,12 +66,15 @@ export interface OrderItemResponse {
   quantity: number;
   customizations?: string[];
   notes?: string[];
+  note?: string;
 }
 
 export interface CreateOrderRequest {
   tableNumber: string;
   staffName: string;
   items: OrderItemRequest[];
+  /** Ghi chú cho cả đơn (backend có thể chưa lưu — gửi kèm để sẵn sàng tích hợp) */
+  note?: string;
 }
 
 export interface OrderResponse {
@@ -79,6 +84,9 @@ export interface OrderResponse {
   status: OrderStatus;
   timestamp: string;
   items: OrderItemResponse[];
+  notes?: string[];
+  note?: string;
+  orderNote?: string;
 }
 
 // Kitchen Ticket Types
@@ -99,6 +107,9 @@ export interface KitchenTicket {
   receivedAt: string;
   completedAt?: string;
   items: KitchenTicketItem[];
+  notes?: string[];
+  note?: string;
+  orderNote?: string;
 }
 
 export interface NewTicketEvent {
@@ -108,6 +119,9 @@ export interface NewTicketEvent {
   status: OrderStatus;
   receivedAt: string;
   items: KitchenTicketItem[];
+  notes?: string[];
+  note?: string;
+  orderNote?: string;
 }
 
 export interface TicketUpdateEvent {
@@ -118,6 +132,9 @@ export interface TicketUpdateEvent {
   receivedAt: string;
   completedAt?: string;
   items: KitchenTicketItem[];
+  notes?: string[];
+  note?: string;
+  orderNote?: string;
 }
 
 export interface CompletedTicketEvent {

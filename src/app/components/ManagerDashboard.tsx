@@ -17,7 +17,14 @@ import React from 'react';
 import { LogOut, Settings, TrendingUp, ShoppingBag, DollarSign, UtensilsCrossed, Edit, Plus, Trash2, BarChart3 } from 'lucide-react';
 
 function toStatusBadge(status: OrderStatus) {
-  if (status === 'PENDING' || status === 'CONFIRM' || status === 'CREATED') return { label: 'Moi', variant: 'default' as const };
+  if (
+    status === 'PENDING' ||
+    status === 'CONFIRM' ||
+    status === 'CREATED' ||
+    status === 'KITCHEN_PENDING' ||
+    status === 'WAIT_FOR_MENU_CONFIRM'
+  )
+    return { label: 'Moi', variant: 'default' as const };
   if (status === 'COOKING') return { label: 'Dang nau', variant: 'secondary' as const };
   if (status === 'READY') return { label: 'San sang', variant: 'outline' as const };
   if (status === 'SERVED') return { label: 'Da phuc vu', variant: 'default' as const };

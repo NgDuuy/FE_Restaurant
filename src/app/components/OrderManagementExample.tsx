@@ -8,10 +8,14 @@
  * 4. Display error states and loading states
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useOrder } from '../contexts/OrderContext';
+import { useMenu } from '../contexts/MenuContext';
 import { useOrderForm, useWebSocket } from '../hooks';
-import { OrderItemRequest, OrderResponse } from '../types';
+import { MenuItem, OrderItemRequest, OrderResponse, OrderStatus } from '../types';
+
+const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
 
 /**
  * Main Order Management Component
@@ -55,6 +59,8 @@ function CreateOrderForm() {
         setTableNumber,
         staffName,
         setStaffName,
+        orderNote,
+        setOrderNote,
         items,
         addItem,
         removeItem,
@@ -127,6 +133,11 @@ function CreateOrderForm() {
                         <p>
                             <strong>Status:</strong> {createdOrder.status}
                         </p>
+                        {createdOrder.note ? (
+                            <p>
+                                <strong>Note:</strong> {createdOrder.note}
+                            </p>
+                        ) : null}
                     </div>
                     <button onClick={reset}>Create Another Order</button>
                 </div>
@@ -165,6 +176,17 @@ function CreateOrderForm() {
                             onChange={(e) => setStaffName(e.target.value)}
                             placeholder="Your name"
                             required
+                        />
+                    </div>
+
+                    <div className="form-group">
+                        <label htmlFor="orderNote">Order Note:</label>
+                        <textarea
+                            id="orderNote"
+                            value={orderNote}
+                            onChange={(e) => setOrderNote(e.target.value)}
+                            placeholder="Ví dụ: ít đá, mang ra cùng lúc..."
+                            rows={3}
                         />
                     </div>
 
@@ -286,6 +308,7 @@ function CreateOrderForm() {
 function OrderMonitor() {
     const { orders, liveTickets, wsConnected, fetchAllOrders, getOrdersByStatus } = useOrder();
     const { isConnected } = useWebSocket({ autoConnect: true });
+    const { menuItems } = useMenu();
 
     // Fetch orders on mount
     useEffect(() => {
@@ -298,6 +321,8 @@ function OrderMonitor() {
     const creatingOrders = getOrdersByStatus('CREATED');
     const cookingOrders = getOrdersByStatus('COOKING');
     const readyOrders = getOrdersByStatus('READY');
+
+    const menuById = useMemo(() => new Map(menuItems.map((item) => [item.id, item])), [menuItems]);
 
     return (
         <div className="monitor-section">
@@ -321,7 +346,7 @@ function OrderMonitor() {
                             <p className="empty-state">No orders yet</p>
                         ) : (
                             ordersArray.map((order) => (
-                                <OrderCard key={order.id} order={order} />
+                                <OrderCard key={order.id} order={order} menuById={menuById} />
                             ))
                         )}
                     </div>
@@ -362,33 +387,68 @@ function OrderMonitor() {
 /**
  * Order Card Component
  */
-function OrderCard({ order }: { order: OrderResponse }) {
-    const statusColor: Record<string, string> = {
+function OrderCard({ order, menuById }: { order: OrderResponse; menuById: Map<string, MenuItem> }) {
+    const statusColor: Record<OrderStatus, string> = {
+        PENDING: '#f97316',
+        CONFIRM: '#3b82f6',
         CREATED: '#3b82f6',
+        KITCHEN_PENDING: '#8b5cf6',
+        WAIT_FOR_MENU_CONFIRM: '#f59e0b',
         COOKING: '#f59e0b',
         READY: '#10b981',
-        SERVED: '#8b5cf6',
+        SERVED: '#6b7280',
+        REJECT: '#ef4444',
     };
 
+    const statusLabel: Record<OrderStatus, string> = {
+        PENDING: 'Pending',
+        CONFIRM: 'Confirmed',
+        CREATED: 'Created',
+        KITCHEN_PENDING: 'Kitchen pending',
+        WAIT_FOR_MENU_CONFIRM: 'Waiting menu',
+        COOKING: 'Cooking',
+        READY: 'Ready',
+        SERVED: 'Served',
+        REJECT: 'Rejected',
+    };
+
+    const formattedDate = new Date(order.timestamp).toLocaleDateString('vi-VN');
+    const formattedTime = new Date(order.timestamp).toLocaleTimeString('vi-VN');
+
     return (
-        <div className="order-card" style={{ borderLeftColor: statusColor[order.status] }}>
+        <div className="order-card" style={{ borderLeftColor: statusColor[order.status] || '#94a3b8' }}>
             <div className="card-header">
-                <span className="order-id">Order #{order.id}</span>
-                <span className="status-badge" style={{ backgroundColor: statusColor[order.status] }}>
-                    {order.status}
-                </span>
+                <span className="order-id">Order #{order.id} - Table {order.tableNumber}</span>
             </div>
             <div className="card-body">
-                <p>
-                    <strong>Table:</strong> {order.tableNumber}
+                <p className="subtitle">
+                    {order.staffName} • {formattedTime} {formattedDate}
                 </p>
-                <p>
-                    <strong>Staff:</strong> {order.staffName}
-                </p>
-                <p>
-                    <strong>Items:</strong> {order.items.length}
-                </p>
-                <p className="time">{new Date(order.timestamp).toLocaleTimeString()}</p>
+                <p className="status-text">{statusLabel[order.status] || order.status}</p>
+                {order.note ? (
+                    <p className="order-note">
+                        <strong>Ghi chú:</strong> {order.note}
+                    </p>
+                ) : null}
+                <div className="order-items">
+                    {order.items.map((item) => {
+                        const price = menuById.get(item.menuItemId)?.price;
+                        return (
+                            <div key={item.id} className="order-item">
+                                <div className="item-name">{item.name}</div>
+                                {item.customizations?.length ? (
+                                    <div className="item-customizations">{item.customizations.join(', ')}</div>
+                                ) : null}
+                                <div className="item-meta">
+                                    <span>x{item.quantity}</span>
+                                    {price !== undefined ? (
+                                        <span>{formatCurrency(price)}</span>
+                                    ) : null}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
         </div>
     );
@@ -405,6 +465,8 @@ function TicketCard({ ticket }: { ticket: OrderResponse | any }) {
         SERVED: '#8b5cf6',
     };
 
+    const ticketNote = ticket.note ?? ticket.orderNote;
+
     return (
         <div className="ticket-card" style={{ borderColor: statusColor[ticket.status] }}>
             <div className="ticket-header">
@@ -415,15 +477,24 @@ function TicketCard({ ticket }: { ticket: OrderResponse | any }) {
                 <p>
                     <strong>Status:</strong> {ticket.status}
                 </p>
+                {ticketNote ? (
+                    <p>
+                        <strong>Ghi chú:</strong> {ticketNote}
+                    </p>
+                ) : null}
                 <p>
                     <strong>Items:</strong>
                 </p>
                 <ul>
-                    {ticket.items?.map((item: any, idx: number) => (
-                        <li key={idx}>
-                            {item.itemName || item.name} x {item.quantity}
-                        </li>
-                    ))}
+                    {ticket.items?.map((item: any, idx: number) => {
+                        const itemNotes = item.notes?.length ? item.notes : item.note ? [item.note] : [];
+                        return (
+                            <li key={idx}>
+                                {item.itemName || item.name} x {item.quantity}
+                                {itemNotes.length ? ` — ${itemNotes.join(', ')}` : ''}
+                            </li>
+                        );
+                    })}
                 </ul>
             </div>
         </div>

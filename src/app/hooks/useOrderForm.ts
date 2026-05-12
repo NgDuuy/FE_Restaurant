@@ -12,6 +12,8 @@ interface UseOrderFormReturn {
     setTableNumber: (value: string) => void;
     staffName: string;
     setStaffName: (value: string) => void;
+    orderNote: string;
+    setOrderNote: (value: string) => void;
     items: OrderItemRequest[];
     addItem: (item: OrderItemRequest) => void;
     removeItem: (index: number) => void;
@@ -26,7 +28,8 @@ interface UseOrderFormReturn {
 const defaultState = {
     tableNumber: '',
     staffName: '',
-    items: [],
+    orderNote: '',
+    items: [] as OrderItemRequest[],
 };
 
 /**
@@ -37,6 +40,7 @@ export function useOrderForm(): UseOrderFormReturn {
     const { createOrder, error: contextError, clearError } = useOrder();
     const [tableNumber, setTableNumber] = useState(defaultState.tableNumber);
     const [staffName, setStaffName] = useState(defaultState.staffName);
+    const [orderNote, setOrderNote] = useState(defaultState.orderNote);
     const [items, setItems] = useState<OrderItemRequest[]>(defaultState.items);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [createdOrder, setCreatedOrder] = useState<OrderResponse | null>(null);
@@ -106,6 +110,7 @@ export function useOrderForm(): UseOrderFormReturn {
                 tableNumber,
                 staffName,
                 items,
+                note: orderNote.trim() || undefined,
             };
 
             const order = await createOrder(request);
@@ -124,6 +129,7 @@ export function useOrderForm(): UseOrderFormReturn {
     const reset = () => {
         setTableNumber(defaultState.tableNumber);
         setStaffName(defaultState.staffName);
+        setOrderNote(defaultState.orderNote);
         setItems(defaultState.items);
         setSubmitError(null);
         setCreatedOrder(null);
@@ -135,6 +141,8 @@ export function useOrderForm(): UseOrderFormReturn {
         setTableNumber,
         staffName,
         setStaffName,
+        orderNote,
+        setOrderNote,
         items,
         addItem,
         removeItem,
